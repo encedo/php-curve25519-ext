@@ -3,80 +3,99 @@
 #endif
 
 #include "php.h"
+#include "php_curve25519.h"
+#include "ext/standard/info.h"
+#include "zend_exceptions.h"
+#include "ext/spl/spl_exceptions.h"
 
 const unsigned char basepoint[32] = {9};
 
-void curve25519_clamp(unsigned char secret[32])
-{
-	secret[0] &= 248;
-	secret[31] &= 127;
-	secret[31] |= 64;
-}
-
 PHP_FUNCTION(curve25519_public)
 {
-	unsigned char *secret;
-	int secret_len;
+	char *secret;
+#if PHP_VERSION_ID >= 70000
+    size_t secret_len;
+#else
+    int secret_len;
+#endif	
+	char public[32];
+	char *unclamped;
 
+#ifndef FAST_ZPP
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s", &secret, &secret_len) == FAILURE) {
 		RETURN_FALSE;
 	}
+#else
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STRING(secret, secret_len)
+	ZEND_PARSE_PARAMETERS_END();
+#endif
 
 	if (secret_len != 32) {
-		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Secret must be 32 bytes");
-		RETURN_FALSE;
+		zend_throw_exception(spl_ce_InvalidArgumentException, "Secret must be 32 bytes", 0 TSRMLS_CC);
 	}
 
-	char *clamped = estrdup(secret);
-	curve25519_clamp(clamped);
+	// curve25519_donna clamps, and would modify $secret
+	unclamped = estrdup(secret);
+	curve25519_donna(public, unclamped, basepoint);
+	efree(unclamped);
 
-	unsigned char public[33];
-	curve25519_donna(public, clamped, basepoint);
-
-	efree(clamped);
-
+#if PHP_VERSION_ID >= 70000
+	RETURN_STRINGL(public, 32);
+#else
 	RETURN_STRINGL(public, 32, 1);
+#endif
 }
 
 PHP_FUNCTION(curve25519_shared)
 {
-	unsigned char *secret;
-	int secret_len;
+	char *secret;
+	char *public;
+#if PHP_VERSION_ID >= 70000
+    size_t secret_len;
+    size_t public_len;
+#else
+    int secret_len;
+    int public_len;
+#endif	
+	char shared[32];
+	char *unclamped;
 
-	unsigned char *public;
-	int public_len;
-
-
+#ifndef FAST_ZPP
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ss", &secret, &secret_len, &public, &public_len) == FAILURE) {
 		RETURN_FALSE;
 	}
+#else
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_STRING(secret, secret_len)
+		Z_PARAM_STRING(public, public_len)
+	ZEND_PARSE_PARAMETERS_END();
+#endif
 
 	if (secret_len != 32) {
-		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Secret must be 32 bytes");
-		RETURN_FALSE;
+		zend_throw_exception(spl_ce_InvalidArgumentException, "Secret must be 32 bytes", 0 TSRMLS_CC);
 	}
 
 	if (public_len != 32) {
-		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Public must be 32 bytes");
-		RETURN_FALSE;
+		zend_throw_exception(spl_ce_InvalidArgumentException, "Public must be 32 bytes", 0 TSRMLS_CC);
 	}
 
-	char *clamped = estrdup(secret);
-	curve25519_clamp(clamped);
+	unclamped = estrdup(secret);
+	curve25519_donna(shared, unclamped, public);
+	efree(unclamped);
 
-	unsigned char shared[33];
-	curve25519_donna(shared, clamped, public);
-
-	efree(clamped);
-
+#if PHP_VERSION_ID >= 70000
+	RETURN_STRINGL(shared, 32);
+#else
 	RETURN_STRINGL(shared, 32, 1);
+#endif
 }
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_curve25519_public, 0, 0, 1)
 	ZEND_ARG_INFO(0, secret)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_INFO_EX(arginfo_curve25519_shared, 0, 0, 1)
+ZEND_BEGIN_ARG_INFO_EX(arginfo_curve25519_shared, 0, 0, 2)
 	ZEND_ARG_INFO(0, secret)
 	ZEND_ARG_INFO(0, public)
 ZEND_END_ARG_INFO()
