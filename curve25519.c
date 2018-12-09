@@ -36,7 +36,12 @@ PHP_FUNCTION(curve25519_public)
 	}
 
 	// curve25519_donna clamps, and would modify $secret
-	unclamped = estrdup(secret);
+	
+	// BUG: estrdup() is for NULL-terminated string, causing errors if 'secret' contain 0x00 (very rare but possible - I had such a case)
+	// unclamped = estrdup(secret);
+	unclamped = emalloc(32);
+	memmove(unclamped, secret, 32);
+	
 	curve25519_donna(public, unclamped, basepoint);
 	efree(unclamped);
 
@@ -80,7 +85,11 @@ PHP_FUNCTION(curve25519_shared)
 		zend_throw_exception(spl_ce_InvalidArgumentException, "Public must be 32 bytes", 0 TSRMLS_CC);
 	}
 
-	unclamped = estrdup(secret);
+	// BUG: estrdup() is for NULL-terminated string, causing errors if 'secret' contain 0x00 (very rare but possible - I had such a case)
+	// unclamped = estrdup(secret);
+	unclamped = emalloc(32);
+	memmove(unclamped, secret, 32);
+
 	curve25519_donna(shared, unclamped, public);
 	efree(unclamped);
 
